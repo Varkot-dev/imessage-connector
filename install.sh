@@ -74,8 +74,11 @@ launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "Background helper installed."
 
-# 3b. Plan change check (every 30 minutes, free, texts only you, only when a plan changes)
-CLABEL="com.imessage-plans.changes"
+# 3b. Background job (every minute, free, texts only you): replies to your commands,
+#     follow-up tracker, and plan change check every 30 minutes
+launchctl bootout "gui/$(id -u)/com.imessage-plans.changes" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/com.imessage-plans.changes.plist"
+CLABEL="com.imessage-plans.background"
 CPLIST="$HOME/Library/LaunchAgents/$CLABEL.plist"
 cat > "$CPLIST" <<EOF2
 <?xml version="1.0" encoding="UTF-8"?>
@@ -83,17 +86,17 @@ cat > "$CPLIST" <<EOF2
 <plist version="1.0"><dict>
   <key>Label</key><string>$CLABEL</string>
   <key>ProgramArguments</key><array>
-    <string>$DIR/.venv/bin/python</string><string>$DIR/check_changes.py</string>
+    <string>$DIR/.venv/bin/python</string><string>$DIR/background.py</string>
   </array>
-  <key>StartInterval</key><integer>1800</integer>
+  <key>StartInterval</key><integer>60</integer>
   <key>RunAtLoad</key><false/>
-  <key>StandardOutPath</key><string>$STATE/changes.log</string>
-  <key>StandardErrorPath</key><string>$STATE/changes.log</string>
+  <key>StandardOutPath</key><string>$STATE/background.log</string>
+  <key>StandardErrorPath</key><string>$STATE/background.log</string>
 </dict></plist>
 EOF2
 launchctl bootout "gui/$(id -u)/$CLABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$CPLIST"
-echo "Plan change check installed (every 30 minutes)."
+echo "Background job installed (replies, follow-ups, plan changes)."
 
 # 4. Claude desktop config (backup first)
 mkdir -p "$(dirname "$CONFIG")"

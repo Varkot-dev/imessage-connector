@@ -179,6 +179,15 @@ def check_plan_changes(send_text: bool = True) -> dict:
 
 
 @_tool()
+def list_followups() -> dict:
+    """Open follow-ups the background job found in the user's texts ("call me",
+    "I'll let you know"), numbered the same way as the text it sends."""
+    from imessage_plans import followups
+    items = followups.open_items()
+    return {"items": items, "as_text": followups.render_list(items)}
+
+
+@_tool()
 def list_recent_chats(hours: int = 48) -> list[dict]:
     """Conversations with messages in the last N hours, newest first."""
     db = _db()

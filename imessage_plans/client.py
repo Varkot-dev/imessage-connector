@@ -46,7 +46,8 @@ def _request(payload: dict, timeout: float = 30) -> dict:
 def _to_message(d: dict) -> Message:
     return Message(rowid=d["rowid"], guid=d.get("guid", ""), chat_id=d["chat_id"], chat_name=d["chat_name"],
                    is_group=d["is_group"], sender=d["sender"], is_from_me=d["is_from_me"],
-                   sent_at=datetime.fromisoformat(d["sent_at"]), text=d["text"], kind=d.get("kind", "message"))
+                   sent_at=datetime.fromisoformat(d["sent_at"]), text=d["text"], kind=d.get("kind", "message"),
+                   extra={"chat_identifier": d.get("chat_identifier")})
 
 
 class HelperDB:

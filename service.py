@@ -56,7 +56,8 @@ def chat_allowed(name: str, cfg: dict) -> bool:
 def _msg(m) -> dict:
     return {"rowid": m.rowid, "guid": m.guid, "chat_id": m.chat_id, "chat_name": m.chat_name,
             "is_group": m.is_group, "sender": m.sender, "is_from_me": m.is_from_me,
-            "sent_at": m.sent_at.isoformat(timespec="seconds"), "text": m.text, "kind": m.kind}
+            "sent_at": m.sent_at.isoformat(timespec="seconds"), "text": m.text, "kind": m.kind,
+            "chat_identifier": m.extra.get("chat_identifier")}
 
 
 def handle(req: dict) -> dict:

@@ -217,6 +217,7 @@ class MessagesDB:
             ) from e
         self.contacts = load_contacts()
         self._chat_cache: dict[int, tuple[str, bool]] = {}
+        self._ident: dict[int, str | None] = {}
         cols = {r[1] for r in self.con.execute("PRAGMA table_info(message)")}
         self.has_retracted = "date_retracted" in cols
         self.has_reply = "reply_to_guid" in cols
@@ -237,6 +238,7 @@ class MessagesDB:
             )
         ]
         is_group = len(members) > 1
+        self._ident[chat_id] = row[1] if row else None
         display = row[0] if row and row[0] else None
         if not display:
             names = [resolve_handle(m, self.contacts) for m in members]
@@ -291,7 +293,7 @@ class MessagesDB:
                 snippet = target if len(target) < 80 else target[:77] + "..."
                 out.append(Message(rowid, guid, cid, chat_name, is_group, sender, bool(from_me),
                                    sent_at, f'({verb} "{snippet}")', kind="reaction",
-                                   service=service))
+                                   service=service, extra={"chat_identifier": self._ident.get(cid)}))
                 continue
             if assoc_type < 0 or assoc_type >= 3000:
                 continue  # reaction removals and other system rows
@@ -301,7 +303,8 @@ class MessagesDB:
                 continue  # our own text-to-self notifications
             guid_text[guid] = body_text
             out.append(Message(rowid, guid, cid, chat_name, is_group, sender, bool(from_me),
-                               sent_at, body_text, reply_to_guid=reply_to, service=service))
+                               sent_at, body_text, reply_to_guid=reply_to, service=service,
+                               extra={"chat_identifier": self._ident.get(cid)}))
         return out
 
     def recent_chats(self, since: datetime) -> list[dict]:

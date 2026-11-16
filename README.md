@@ -1,4 +1,4 @@
-# iMessage Connector
+# iMessage + Ed connector
 
 A local, read-only connector for Claude that:
 
@@ -6,7 +6,11 @@ A local, read-only connector for Claude that:
 2. **Texts you when a plan changes.** If someone writes "can we do 6 instead" or
    "something came up" in the chat for a plan you added, you get a text. Free, local,
    and it never touches your calendar.
-3. **Catches you up on Ed Discussion** for the classes you choose.
+3. **Tracks follow-ups.** "Call me", "lmk", "I'll let you know": loose ends get texted to
+   you twice a day as a numbered list.
+4. **Lets you reply by text.** Text yourself "done 2", "snooze 1", "list", or "help" and it
+   answers within a minute.
+5. **Catches you up on Ed Discussion** for the classes you choose.
 
 It runs on your Mac because that's where your messages are stored. It's a small
 Python process that sits idle until Claude calls it, so you won't notice it.
@@ -35,13 +39,34 @@ Python process that sits idle until Claude calls it, so you won't notice it.
 ## Change alerts
 
 When you add a plan, Claude registers it with `register_plan` and `record_plan_decision`
-(including the calendar event id). A background job (`check_changes.py`, installed by
-`install.sh`, every 30 minutes) then reads only those plans' conversations and looks for
+(including the calendar event id). The background job (every 30 minutes) then reads only those plans' conversations and looks for
 reschedule or cancel language with plain keyword matching. No API and no Claude usage.
 Each message triggers at most one text. Past plans are ignored.
 
 To tune it, edit `CHANGE_PHRASES` in `imessage_plans/changes.py`. Logs go to
-`~/.imessage-plans/changes.log`.
+`~/.imessage-plans/background.log`.
+
+## Follow-ups and texting back
+
+`background.py` runs every minute (installed by `install.sh`). It is free: no API and no
+Claude. It looks for people asking you to get back to them ("call me", "can I call you
+later?", "lmk") in one-on-one chats, and for your own promises ("ill call tmmr", "I'll let
+you know") in any chat. At 12:30 PM and 8:30 PM it texts you the open list if anything new
+came in. Items expire after 4 days.
+
+You can reply in your self-chat (the conversation with your own number):
+
+| Text | What happens |
+|---|---|
+| `list` | Sends the open follow-ups, numbered |
+| `done 2`, `done 1 3`, `done all` | Clears those items |
+| `snooze 2` | Hides it until tomorrow |
+| `ok` | Dismisses a change alert |
+| `help` | Shows these commands |
+
+Anything else you text yourself is ignored, so notes-to-self are safe. Commands only change
+the connector's own files in `~/.imessage-plans`. They never text anyone else and never
+touch your calendar. Phrases live in `imessage_plans/followups.py` if you want to tune them.
 
 ## Setup (about 5 minutes)
 
@@ -94,7 +119,10 @@ Just ask Claude in the desktop app:
 | `imessage_plans/extract.py` | Optional paid Haiku mode (off by default) |
 | `imessage_plans/state.py` | Dedup memory for plans, and `register_plan` for filter-only mode |
 | `imessage_plans/changes.py` | Free keyword check for reschedules and cancellations |
-| `check_changes.py` | Runs the change check once (used by the 30-minute background job) |
+| `imessage_plans/followups.py` | Free keyword follow-up tracker |
+| `imessage_plans/selfchat.py` | Answers commands you text yourself |
+| `background.py` | The every-minute background job (commands, follow-ups, change check, digests) |
+| `check_changes.py` | Runs only the change check once, for testing |
 | `imessage_plans/ed.py` | Read-only Ed Discussion client |
 | `imessage_plans/notify.py` | Text-to-self, the only sending code |
 | `test_run.py` | Test mode report |
