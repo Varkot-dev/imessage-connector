@@ -1,0 +1,4 @@
+mcp>=1.10
+anthropic>=0.40
+pytypedstream>=0.1
+pytest>=8

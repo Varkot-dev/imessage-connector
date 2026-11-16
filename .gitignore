@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+reports/
+*.db
+.env
+config.json
+bin/
+iMessage Helper.app/
+pytest-cache-files-*/
+.DS_Store
