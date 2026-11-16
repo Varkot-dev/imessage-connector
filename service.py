@@ -13,13 +13,18 @@ Requests are one JSON line each:
   {"op": "ping"}
   {"op": "fetch", "since": ISO, "until": ISO|null, "chat_id": int|null, "limit": int}
   {"op": "recent_chats", "since": ISO}
+  {"op": "image", "attachment_id": int}   -> JPEG (base64), resized, images only
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import os
+import shutil
 import socketserver
+import subprocess
+import tempfile
 import sys
 from datetime import datetime
 
@@ -80,9 +85,32 @@ def handle(req: dict) -> dict:
         if op == "recent_chats":
             chats = db.recent_chats(datetime.fromisoformat(req["since"]))
             return {"ok": True, "chats": [c for c in chats if chat_allowed(c["name"], cfg)]}
+        if op == "image":
+            path = db.image_path(int(req["attachment_id"]))
+            if not path:
+                return {"ok": False, "error": "No image with that attachment_id (or the file is not on this Mac)."}
+            return {"ok": True, "jpeg_base64": _to_jpeg_b64(path)}
         return {"ok": False, "error": f"unknown op {op!r}"}
     finally:
         db.close()
+
+
+MAX_IMAGE_BYTES = 4_000_000
+
+
+def _to_jpeg_b64(path: str) -> str:
+    """Convert (HEIC, PNG, ...) to a resized JPEG with macOS's built-in sips."""
+    tmp = tempfile.mkdtemp(dir=STATE_DIR)
+    out = os.path.join(tmp, "img.jpg")
+    try:
+        subprocess.run(["/usr/bin/sips", "-s", "format", "jpeg", "-Z", "1568", path, "--out", out],
+                       capture_output=True, timeout=30, check=True)
+        if os.path.getsize(out) > MAX_IMAGE_BYTES:
+            raise ValueError("Image too large after resizing.")
+        with open(out, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 class Handler(socketserver.StreamRequestHandler):

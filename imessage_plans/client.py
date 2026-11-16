@@ -59,6 +59,11 @@ class HelperDB:
                          "chat_id": chat_id, "limit": limit})
         return [_to_message(d) for d in resp["messages"]]
 
+    def image(self, attachment_id: int) -> bytes:
+        import base64
+        resp = _request({"op": "image", "attachment_id": int(attachment_id)}, timeout=60)
+        return base64.b64decode(resp["jpeg_base64"])
+
     def recent_chats(self, since: datetime) -> list[dict]:
         return _request({"op": "recent_chats", "since": since.isoformat()})["chats"]
 

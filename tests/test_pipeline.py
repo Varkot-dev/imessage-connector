@@ -269,3 +269,25 @@ def test_helper_roundtrip(fake_db, tmp_path, monkeypatch):
     assert "ESE squad" not in {m.chat_name for m in db.fetch(datetime.now().astimezone() - timedelta(days=1))}
     with pytest.raises(client.HelperError):
         client._request({"op": "drop_tables"})                  # unknown ops refused
+
+
+def test_image_attachments_are_tagged(fake_db, tmp_path, monkeypatch):
+    con = sqlite3.connect(fake_db)
+    con.executescript("""
+        CREATE TABLE attachment (ROWID INTEGER PRIMARY KEY, filename TEXT, mime_type TEXT, transfer_name TEXT);
+        CREATE TABLE message_attachment_join (message_id INTEGER, attachment_id INTEGER);
+        INSERT INTO attachment VALUES (7, '~/Library/Messages/Attachments/ab/flyer.heic', 'image/heic', 'flyer.heic');
+        INSERT INTO attachment VALUES (8, '~/Library/Messages/Attachments/ab/doc.pdf', 'application/pdf', 'doc.pdf');
+    """)
+    now = datetime.now().astimezone()
+    con.execute("INSERT INTO message (ROWID, guid, text, handle_id, date, is_from_me, service) VALUES (99, 'm99', ?, 1, ?, 0, 'iMessage')",
+                ("￼", local_to_apple_ns(now - timedelta(minutes=2))))
+    con.execute("INSERT INTO chat_message_join VALUES (1, 99)")
+    con.execute("INSERT INTO message_attachment_join VALUES (99, 7), (99, 8)")
+    con.commit()
+    con.close()
+    db = MessagesDB(fake_db)
+    msgs = db.fetch(datetime.now().astimezone() - timedelta(days=1))
+    assert any(m.text == "[image, attachment_id 7]" for m in msgs)   # pdf is not tagged
+    assert db.image_path(7) is None   # file is not on this machine, so nothing is served
+    assert db.image_path(8) is None   # not an image

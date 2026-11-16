@@ -218,6 +218,8 @@ class MessagesDB:
         self.contacts = load_contacts()
         self._chat_cache: dict[int, tuple[str, bool]] = {}
         self._ident: dict[int, str | None] = {}
+        tables = {r[0] for r in self.con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        self.has_attachments = {"attachment", "message_attachment_join"} <= tables
         cols = {r[1] for r in self.con.execute("PRAGMA table_info(message)")}
         self.has_retracted = "date_retracted" in cols
         self.has_reply = "reply_to_guid" in cols
@@ -274,6 +276,7 @@ class MessagesDB:
         """
         params.append(limit)
         rows = self.con.execute(sql, params).fetchall()
+        images = self._images_for([r[0] for r in rows])
         guid_text: dict[str, str] = {}
         out: list[Message] = []
         for (rowid, guid, cid, from_me, date, text, body, assoc_type, assoc_guid,
@@ -282,6 +285,11 @@ class MessagesDB:
                 continue
             body_text = text if text and text.strip() and text.strip() != "￼" else None
             body_text = body_text or decode_attributed_body(body)
+            if body_text:
+                body_text = body_text.replace("\ufffc", "").strip() or None
+            if rowid in images:
+                tag = " ".join(f"[image, attachment_id {a}]" for a in images[rowid])
+                body_text = f"{body_text} {tag}" if body_text else tag
             sender = "me" if from_me else resolve_handle(handle, self.contacts)
             chat_name, is_group = self.chat_label(cid)
             sent_at = apple_time_to_local(date)
@@ -306,6 +314,36 @@ class MessagesDB:
                                sent_at, body_text, reply_to_guid=reply_to, service=service,
                                extra={"chat_identifier": self._ident.get(cid)}))
         return out
+
+    def _images_for(self, rowids: list[int]) -> dict[int, list[int]]:
+        """Image attachments per message (photos, screenshots, flyers)."""
+        out: dict[int, list[int]] = {}
+        if not self.has_attachments or not rowids:
+            return out
+        for i in range(0, len(rowids), 500):
+            chunk = rowids[i:i + 500]
+            q = ("SELECT maj.message_id, a.ROWID FROM message_attachment_join maj "
+                 "JOIN attachment a ON a.ROWID = maj.attachment_id "
+                 f"WHERE maj.message_id IN ({','.join('?' * len(chunk))}) "
+                 "AND (a.mime_type LIKE 'image/%' OR lower(a.filename) LIKE '%.heic')")
+            for mid, aid in self.con.execute(q, chunk):
+                out.setdefault(mid, []).append(aid)
+        return out
+
+    def image_path(self, attachment_id: int) -> str | None:
+        """File path of one image attachment, only if it lives in the Messages folder."""
+        if not self.has_attachments:
+            return None
+        row = self.con.execute(
+            "SELECT filename, mime_type FROM attachment WHERE ROWID = ?", (attachment_id,)).fetchone()
+        if not row or not row[0]:
+            return None
+        path = os.path.realpath(os.path.expanduser(row[0]))
+        root = os.path.realpath(os.path.expanduser("~/Library/Messages/Attachments"))
+        is_image = (row[1] or "").startswith("image/") or path.lower().endswith(".heic")
+        if not is_image or not path.startswith(root + os.sep) or not os.path.isfile(path):
+            return None
+        return path
 
     def recent_chats(self, since: datetime) -> list[dict]:
         rows = self.con.execute(
